@@ -1,0 +1,229 @@
+---
+title: "ADS_Project1_YueZhang"
+author: "YueZhang yz3383"
+date: "2/3/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Step0: Text Pre-Processing
+This part mainly focus on loading the data to be cleaned and processed.
+
+```{r load libraries, warning=FALSE, message=FALSE}
+library(tm)
+library(tidytext)
+library(tidyverse)
+library(DT)
+library(wordcloud)
+library(RColorBrewer)
+```
+
+```{r read data, warning=FALSE, message=FALSE}
+ds_main <- read.csv("../data/cleaned_hm.csv")
+ds_de <- read.csv("../data/demographic.csv",na.strings=c(""))
+ds1 <- ds_main %>%
+  select(wid,cleaned_hm,predicted_category)
+```
+
+## Preliminary cleaning of text
+
+We clean the text by converting all the letters to the lower case, and removing punctuation, numbers, empty words and extra white space.
+
+```{r text processing in tm}
+corpus <- VCorpus(VectorSource(ds1$cleaned_hm))%>%
+  tm_map(content_transformer(tolower))%>%
+  tm_map(removePunctuation)%>%
+  tm_map(removeNumbers)%>%
+  tm_map(removeWords, character(0))%>%
+  tm_map(stripWhitespace)
+```
+
+## Stemming words and converting tm object to tidy object
+
+Stemming reduces a word to its word *stem*. We stem the words here and then convert the "tm" object to a "tidy" object for much faster processing.
+
+```{r stemming}
+stemmed <- tm_map(corpus, stemDocument) %>%
+  tidy() %>%
+  select(text)
+```
+
+## Creating tidy format of the dictionary to be used for completing stems
+
+We also need a dictionary to look up the words corresponding to the stems.
+
+```{r tidy dictionary}
+dict <- tidy(corpus) %>%
+  select(text) %>%
+  unnest_tokens(dictionary, text)
+```
+
+## Removing stopwords that don't hold any significant information for our data set
+
+We remove stopwords provided by the "tidytext" package and also add custom stopwords in context of our data.
+
+```{r stopwords}
+data("stop_words")
+
+word <- c("happy","ago","yesterday","lot","today","months","month",
+                 "happier","happiest","last","week","past")
+
+stop_words <- stop_words %>%
+  bind_rows(mutate(tibble(word), lexicon = "updated"))
+```
+
+## Combining stems and dictionary into the same tibble
+
+Here we combine the stems and the dictionary into the same "tidy" object.
+
+```{r tidy stems with dictionary}
+completed <- stemmed %>%
+  mutate(id = row_number()) %>%
+  unnest_tokens(stems, text) %>%
+  bind_cols(dict) %>%
+  anti_join(stop_words, by = c("dictionary" = "word"))
+```
+
+## Stem completion
+
+Lastly, we complete the stems by picking the corresponding word with the highest frequency.
+
+```{r stem completion, warning=FALSE, message=FALSE}
+completed <- completed %>%
+  group_by(stems) %>%
+  count(dictionary) %>%
+  mutate(word = dictionary[which.max(n)]) %>%
+  ungroup() %>%
+  select(stems, word) %>%
+  distinct() %>%
+  right_join(completed) %>%
+  select(-stems)
+```
+
+## Pasting stem completed individual words into their respective happy moments
+
+We want our processed words to resemble the structure of the original happy moments. So we paste the words together to form happy moments.
+
+```{r reverse unnest}
+completed <- completed %>%
+  group_by(id) %>%
+  summarise(text = str_c(word, collapse = " ")) %>%
+  ungroup()
+```
+
+```{r cleaned hm_data, warning=FALSE, message=FALSE}
+ds1 <- ds1 %>%
+  mutate(id = row_number()) %>%
+  inner_join(completed)
+```
+
+
+### Step 1: Merge demographic information with ds1 to get main_data
+
+```{r}
+ds2 <- ds1 %>%
+  inner_join(.,ds_de,by = "wid") %>%
+  select(wid,
+         cleaned_hm,
+         gender, 
+         marital, 
+         parenthood,
+         age, 
+         country, 
+         predicted_category, 
+         text) %>%
+  mutate(count = sapply(ds1$text, wordcount)) %>%
+  filter(gender %in% c("m", "f")) %>%
+  filter(marital %in% c("single", "married")) %>%
+  filter(parenthood %in% c("n", "y"))
+
+```
+
+
+## Create a bag of words using the text data
+
+Here we create a bag of words and draw word cloud to show the frequency of the words.
+
+```{r bag of words, warning=FALSE, message=FALSE}
+bag_of_words <-  ds2 %>%
+  unnest_tokens(word, text)
+
+word_count <- bag_of_words %>%
+  count(word, sort = TRUE)
+```
+
+Draw wordcloud
+
+```{r}
+wordcloud(words = word_count$word, freq = word_count$n, min.freq = 1,
+          max.words=100,random.order=FALSE, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+## Create bigrams using the text data
+
+```{r bigram, warning=FALSE, message=FALSE}
+hm_bigrams <- hm_data %>%
+  filter(count != 1) %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)
+
+bigram_counts <- hm_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  count(word1, word2, sort = TRUE)
+```
+
+```{r}
+ggplot(bigram_counts,aes(word, tf_idf, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~book, ncol = 2, scales = "free") +
+  coord_flip()
+
+
+ggplot(plot_physics, aes(word, tf_idf, fill = author)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~author, ncol = 2, scales = "free") +
+  coord_flip()
+
+```
+
+
+##Step3: Compare between different labels
+
+```{r}
+ds1_gender  <- ds1 %>%
+  count(gender, predicted_category, sort = TRUE) %>%
+  ungroup()
+
+```
+
+```{r}
+ggplot(ds2,aes(x= predicted_category, fill=gender)) + 
+  geom_bar(stat="count") +
+  ggtitle("Happy Moments within different Gender") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ds1 %>%
+   filter(!is.na(marital),!is.na(predicted_category)) %>%
+     ggplot(aes(x= predicted_category, fill=marital)) + 
+        geom_bar(stat="count") +
+        ggtitle("Happy Moments within different Marital") +
+        theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ds1 %>%
+   filter(!is.na(parenthood),!is.na(predicted_category)) %>%
+     ggplot(aes(x= predicted_category, fill=parenthood)) + 
+        geom_bar(stat="count") +
+        ggtitle("Happy Moments within different Parenthood") +
+        theme(plot.title = element_text(hjust = 0.5))
+```
+
