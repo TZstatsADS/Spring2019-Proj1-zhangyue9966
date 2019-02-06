@@ -2,35 +2,72 @@
 title: "ADS_Project1_YueZhang"
 author: "YueZhang yz3383"
 date: "2/3/2019"
-output: html_document
+output:
+  html_document: default
 ---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 38px;
+  color: DarkRed;
+}
+h1 { /* Header 1 */
+  font-size: 28px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+    font-size: 22px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+}
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Step0: Text Pre-Processing
-This part mainly focus on loading the data to be cleaned and processed.
+# Part I: Text Pre-Processing
 
-```{r load libraries, warning=FALSE, message=FALSE}
+To begin the analysis of all Happy Moments, it's important to do some pre-processing to the data we have. This part mainly focus on loading the data and merge the variables I want to analyze into a new dataset called ds2.
+
+```{r load libraries and read in data, warning=FALSE, message=FALSE}
 library(tm)
 library(tidytext)
 library(tidyverse)
 library(DT)
 library(wordcloud)
 library(RColorBrewer)
-```
+library(ngram)  # wordcount()
+library(gplots) # heatmap.2()
+library(ggraph) # a network of bigrams
 
-```{r read data, warning=FALSE, message=FALSE}
+
 ds_main <- read.csv("../data/cleaned_hm.csv")
 ds_de <- read.csv("../data/demographic.csv",na.strings=c(""))
 ds1 <- ds_main %>%
   select(wid,cleaned_hm,predicted_category)
 ```
 
-## Preliminary cleaning of text
+### Preliminary cleaning of text
 
-We clean the text by converting all the letters to the lower case, and removing punctuation, numbers, empty words and extra white space.
+First of all, we clean the text by converting all the letters to the lower case, and removing punctuation, numbers, empty words and extra white space.
 
 ```{r text processing in tm}
 corpus <- VCorpus(VectorSource(ds1$cleaned_hm))%>%
@@ -41,7 +78,7 @@ corpus <- VCorpus(VectorSource(ds1$cleaned_hm))%>%
   tm_map(stripWhitespace)
 ```
 
-## Stemming words and converting tm object to tidy object
+### Stemming words and converting tm object to tidy object
 
 Stemming reduces a word to its word *stem*. We stem the words here and then convert the "tm" object to a "tidy" object for much faster processing.
 
@@ -51,7 +88,7 @@ stemmed <- tm_map(corpus, stemDocument) %>%
   select(text)
 ```
 
-## Creating tidy format of the dictionary to be used for completing stems
+### Creating tidy format of the dictionary to be used for completing stems
 
 We also need a dictionary to look up the words corresponding to the stems.
 
@@ -61,7 +98,7 @@ dict <- tidy(corpus) %>%
   unnest_tokens(dictionary, text)
 ```
 
-## Removing stopwords that don't hold any significant information for our data set
+### Removing stopwords that don't hold any significant information for our data set
 
 We remove stopwords provided by the "tidytext" package and also add custom stopwords in context of our data.
 
@@ -75,7 +112,7 @@ stop_words <- stop_words %>%
   bind_rows(mutate(tibble(word), lexicon = "updated"))
 ```
 
-## Combining stems and dictionary into the same tibble
+### Combining stems and dictionary into the same tibble
 
 Here we combine the stems and the dictionary into the same "tidy" object.
 
@@ -87,7 +124,7 @@ completed <- stemmed %>%
   anti_join(stop_words, by = c("dictionary" = "word"))
 ```
 
-## Stem completion
+### Stem completion
 
 Lastly, we complete the stems by picking the corresponding word with the highest frequency.
 
@@ -103,7 +140,7 @@ completed <- completed %>%
   select(-stems)
 ```
 
-## Pasting stem completed individual words into their respective happy moments
+### Pasting stem completed individual words into their respective happy moments
 
 We want our processed words to resemble the structure of the original happy moments. So we paste the words together to form happy moments.
 
@@ -120,8 +157,7 @@ ds1 <- ds1 %>%
   inner_join(completed)
 ```
 
-
-### Step 1: Merge demographic information with ds1 to get main_data
+### Merge demographic information with ds1 and create a new dataset ds2 
 
 ```{r}
 ds2 <- ds1 %>%
@@ -142,88 +178,231 @@ ds2 <- ds1 %>%
 
 ```
 
+# Part II: Play with the Words!
 
-## Create a bag of words using the text data
+### Analyze Single Word
 
-Here we create a bag of words and draw word cloud to show the frequency of the words.
+Here we create a bag of words and draw word cloud to show the frequency of each single word. We can see 100 most frequent words are "friend", "day", "time", "family", etc. But some of these words are not quite meaningful as the others, like "day", "im", "time". We can not tell what excatly are these happy moments. Tha's why we need to explore bigrams.
 
-```{r bag of words, warning=FALSE, message=FALSE}
+```{r bag of words, message=FALSE, warning=FALSE, paged.print=FALSE}
 bag_of_words <-  ds2 %>%
   unnest_tokens(word, text)
 
 word_count <- bag_of_words %>%
   count(word, sort = TRUE)
-```
 
-Draw wordcloud
-
-```{r}
+set.seed(1)
+dev.new(width = 2000, height = 2000, unit = "px") # adjust the format to fit all words
+# jpeg("../figs/WordCloud.jpeg") # used to save the plot
 wordcloud(words = word_count$word, freq = word_count$n, min.freq = 1,
           max.words=100,random.order=FALSE, 
           colors=brewer.pal(8, "Dark2"))
+# dev.off() # used to save the plot
 ```
 
-## Create bigrams using the text data
+### Analyze Bigrams 
+
+Sometimes two words seem to be more reseonable when they are put together than analyze seperately. So it is necessary to find out all the bigrams and see the frequency of bigrams. First step is to get all bigrams from the text in dataset ds2.
+I noticed that "spent time" and "spend time" are counted as different terms in the top 10 frequanet bigrams, but in fact they have the same meaning. So I substitued "spent time" by "spend time" to avoid repetition.
 
 ```{r bigram, warning=FALSE, message=FALSE}
-hm_bigrams <- hm_data %>%
+ds_bigrams <- ds2 %>%
   filter(count != 1) %>%
   unnest_tokens(bigram, text, token = "ngrams", n = 2)
 
-bigram_counts <- hm_bigrams %>%
+# Exclude repetition in top 10 bigrams
+fixed_ds_bigrams <- ds_bigrams
+fixed_ds_bigrams$bigram <- gsub("spent time", "spend time", fixed_ds_bigrams$bigram)
+```
+
+
+We can see from the following plot that bigrams are more menaingful now and have a major difference between female and male. For male, they prefer to play vedio games while female tend to love eating icecream. But both femail and male enjoyed spending time with people.
+
+```{r}
+bigrams_gender <- fixed_ds_bigrams %>%
+  select(gender,bigram) %>%
+  count(gender,bigram) %>%
+  group_by(gender) %>%
+  arrange(gender,desc(n)) %>%
+  filter(row_number() <= 10) 
+
+# jpeg("../figs/bigrams_gender.jpeg") # used to save the plot
+bigrams_gender %>%
+  group_by(gender) %>%
+  top_n(10, n) %>%
+  arrange(n) %>%
+  ungroup() %>%
+  mutate(bigram = factor(bigram, unique(bigram))) %>%
+  ungroup() %>%
+  ggplot(aes(bigram, n, fill = gender)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ gender, scales = "free", ncol = 2) +
+  coord_flip() +
+  labs(x = "", 
+       y = "") + 
+  ylim(c(0,600))
+  ggtitle("Bigrams frenquency under different gender") +
+  theme(plot.title = element_text(hjust = 0.5))
+# dev.off() # used to save the plot
+```
+
+I also plot the barcharts of bigrams under different marital status and different parenthood experience as below. 
+From the bigrams regrad to marital we can see that single person tend to spend much more time on vedio games than married ones. 
+From the bigrams regrad to parenthood we can see that people raised with parenthood tend to spend less time on vedio games than people raised with parenthood. But they both feel happy on their birthday parties and mother's days.
+
+```{r}
+bigrams_marital <- fixed_ds_bigrams %>%
+  select(marital,bigram) %>%
+  count(marital,bigram) %>%
+  group_by(marital) %>%
+  arrange(marital,desc(n)) %>%
+  filter(row_number() <= 10) 
+
+# jpeg("../figs/bigrams_marital.jpeg") # used to save the plot
+ggplot(bigrams_marital,aes(x = reorder(bigram,n),y = n, fill = marital)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = "", y = "") +
+  facet_wrap(~marital, ncol = 2, scales = "free") +
+  coord_flip() +
+  ylim(c(0,600)) +
+  ggtitle("Bigrams frenquency under different marital") +
+  theme(plot.title = element_text(hjust = 0.5))
+# dev.off() # used to save the plot
+```
+
+```{r}
+bigrams_parenthood <- fixed_ds_bigrams %>%
+  select(parenthood,bigram) %>%
+  count(parenthood,bigram) %>%
+  group_by(parenthood) %>%
+  arrange(parenthood,desc(n)) %>%
+  filter(row_number() <= 10) 
+
+# jpeg("../figs/bigrams_parenthood.jpeg") # used to save the plot
+ggplot(bigrams_parenthood,aes(x = reorder(bigram,n),y = n, fill = parenthood)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = "", y = "") +
+  facet_wrap(~parenthood, ncol = 2, scales = "free") +
+  coord_flip() + 
+  ylim(c(0,700)) +
+  ggtitle("Bigrams frenquency under different parenthood") +
+  theme(plot.title = element_text(hjust = 0.5))
+# dev.off() # used to save the plot
+```
+
+### Correlation Between Bigrams
+
+We can explore the inner connection between all bigrams using ggraph and visualize the netword of them.
+As you can see, happy moment words like friends,family are usually connected with talk,visit,dinner, ect. Also, most happy moments are connected with friends, family, vedio games, birthdays, it's more detailed and more resonable compared to the sigle word's wordcloud plot.
+
+```{r message=FALSE, warning=FALSE}
+library(igraph) #graph_from_data_frame
+library(ggraph)
+
+bigram_counts <- ds_bigrams %>%
   separate(bigram, c("word1", "word2"), sep = " ") %>%
   count(word1, word2, sort = TRUE)
+
+bigram_graph <- bigram_counts %>%
+  filter(n > 110) %>%
+  graph_from_data_frame()
+
+set.seed(2)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+# jpeg("../figs/bigrams_network.jpeg") # used to save the plot
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name),size = 2.5, vjust = 0.5, hjust = 0.5) +
+  theme_void()
+# dev.off() # used to save the plot
 ```
 
-```{r}
-ggplot(bigram_counts,aes(word, tf_idf, fill = book)) +
-  geom_col(show.legend = FALSE) +
-  labs(x = NULL, y = "tf-idf") +
-  facet_wrap(~book, ncol = 2, scales = "free") +
-  coord_flip()
+# Part III: Play with the Categories 
 
+Using the predicted_category variable in ds2, we can assign each word with a clearer category. In total, there are 7 categories: chievement, affection,bouding,enjoy_the_moment,exercise,leisure and natrue. These category labels are easied to understand than hunderds of words. I used barcharts under different gender, marital and parenthood to show theie difference under each category label.
 
-ggplot(plot_physics, aes(word, tf_idf, fill = author)) +
-  geom_col(show.legend = FALSE) +
-  labs(x = NULL, y = "tf-idf") +
-  facet_wrap(~author, ncol = 2, scales = "free") +
-  coord_flip()
-
-```
-
-
-##Step3: Compare between different labels
+From the first plot, it's claer to see that the contrast between female and male in categories like achievement and affection. Female have more happy moments regrads to affection while male enjoy achivement more.
 
 ```{r}
-ds1_gender  <- ds1 %>%
-  count(gender, predicted_category, sort = TRUE) %>%
-  ungroup()
-
-```
-
-```{r}
+# jpeg("../figs/bar_gender.jpeg") # used to save the plot
 ggplot(ds2,aes(x= predicted_category, fill=gender)) + 
   geom_bar(stat="count") +
   ggtitle("Happy Moments within different Gender") +
-  theme(plot.title = element_text(hjust = 0.5))
+  labs(x = "",y = "") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(size  = 10,
+                                angle = 45,
+                                hjust = 1,
+                                vjust = 1))
+# dev.off() # used to save the plot
+
 ```
 
+From the second plot, contrast between married and single also can be seen easily in achievement and affection. Married people seems more sensitive in emotion compared to the single ones, who are more ambitious and enjoy achievement more.
 
 ```{r}
-ds1 %>%
-   filter(!is.na(marital),!is.na(predicted_category)) %>%
-     ggplot(aes(x= predicted_category, fill=marital)) + 
-        geom_bar(stat="count") +
-        ggtitle("Happy Moments within different Marital") +
-        theme(plot.title = element_text(hjust = 0.5))
+# jpeg("../figs/bar_marital.jpeg") # used to save the plot
+
+ggplot(ds2,aes(x= predicted_category, fill=marital)) + 
+  geom_bar(stat="count") +
+  ggtitle("Happy Moments within different Marital status") +
+  labs(x = "",y = "") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(size  = 10,
+                                angle = 45,
+                                hjust = 1,
+                                vjust = 1))
+# dev.off() # used to save the plot
+
 ```
 
+From the last graph we can see, peoples without parenthood tend to be happier while bonding with others and leisure. While people with parenthood feel happy when they enjoy the moment.
+
 ```{r}
-ds1 %>%
-   filter(!is.na(parenthood),!is.na(predicted_category)) %>%
-     ggplot(aes(x= predicted_category, fill=parenthood)) + 
-        geom_bar(stat="count") +
-        ggtitle("Happy Moments within different Parenthood") +
-        theme(plot.title = element_text(hjust = 0.5))
+# jpeg("../figs/bar_parenthood.jpeg") # used to save the plot
+
+ggplot(ds2,aes(x= predicted_category, fill=parenthood)) + 
+  geom_bar(stat="count") +
+  ggtitle("Happy Moments within different Parenthood") +
+  labs(x = "",y = "") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(size  = 10,
+                                angle = 45,
+                                hjust = 1,
+                                vjust = 1))
+# dev.off() # used to save the plot
+
 ```
+
+### Heatmap mixture of all these variables.
+
+Too many plots to understand? Let's look at heatmap and draw a conclusion. Here I make a new variable called category, which contains all possible combinations of gender,marital and parenthood. Then generate a matrix using the frenquency of words in each category to cluster these combinations and the categorical labels.
+
+We can have some interesting findings in this heatmap. For example, most of the happy moments for a single male without parenthood is achievement, while for a married male with parenthood is affection and nature, who seem to be less ambitious.
+
+```{r}
+heatmap_data <- bag_of_words %>%
+  select(gender,marital,parenthood,predicted_category) %>%
+  unite(category,c(gender,marital,parenthood), sep = '-') %>%
+  count(category,predicted_category)
+
+library(gplots)
+heat_matrix <- matrix(heatmap_data$n,nrow = 7)
+rownames(heat_matrix) <- heatmap_data$predicted_category[1:7]
+colnames(heat_matrix) <- unique(heatmap_data$category)
+
+# jpeg("../figs/bigrams_heatmap.jpeg") # used to save the plot
+heatmap.2(heat_matrix, 
+          scale = "column", key=F, 
+          col = bluered(100),
+          cexRow = 0.9, cexCol = 0.9, margins = c(8, 8),
+          trace = "none", density.info = "none")
+# dev.off() # used to save the plot
+
+```
+
 
