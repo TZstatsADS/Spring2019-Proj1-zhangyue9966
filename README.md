@@ -9,10 +9,14 @@ This is the first and only *individual* (as opposed to *team*) this semester.
 
 Term: Spring 2019
 
-+ Projec title: Lorem ipsum dolor sit amet
-+ This project is conducted by [your name]
++ Projec title: Data Story on Happy Moments Dataset
++ This project is conducted by Yue Zhang (*yz3383*)
 
-+ Project summary: [a short summary] Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
++ Project summary: 
+
+In this project, I analyzed the Happy Moments, which contains 100535 records of happy moments.
+By using text mining, bigrams correlation, clustering, and sentiment analysis I explored some basic characters of these happy moments. Including the frequency of words, bigrams and the difference of these frequencies between people with different demographic backgrounds.
+As a result,  several patterns and interesting clusters of their topics are identified in their happy moments' categories and words frequency, both common and different characteristics exist.
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
