@@ -14,7 +14,7 @@ Term: Spring 2019
 
 + Project summary: 
 
-In this project, I analyzed the sentences from the Happy Moments, which contains 100535 records of happy moments sentences.
+In this project, I analyzed the Happy Moments, which contains 100535 records of happy moments.
 By using text mining, bigrams correlation, clustering, and sentiment analysis I explored some basic characters of these happy moments. Including the frequency of words, bigrams and the difference of these frequencies between people with different demographic backgrounds.
 As a result,  several patterns and interesting clusters of their topics are identified in their happy moments' categories and words frequency, both common and different characteristics exist.
 
