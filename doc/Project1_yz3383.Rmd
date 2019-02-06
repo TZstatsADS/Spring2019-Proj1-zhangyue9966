@@ -45,6 +45,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Part I: Text Pre-Processing
 
+### 1) Load Packages
+
 To begin the analysis of all Happy Moments, it's important to do some pre-processing to the data we have. This part mainly focus on loading the data and merge the variables I want to analyze into a new dataset called ds2.
 
 ```{r load libraries and read in data, warning=FALSE, message=FALSE}
@@ -58,14 +60,13 @@ library(ngram)  # wordcount()
 library(gplots) # heatmap.2()
 library(ggraph) # a network of bigrams
 
-
 ds_main <- read.csv("../data/cleaned_hm.csv")
 ds_de <- read.csv("../data/demographic.csv",na.strings=c(""))
 ds1 <- ds_main %>%
   select(wid,cleaned_hm,predicted_category)
 ```
 
-### Preliminary cleaning of text
+### 2) Preliminary cleaning of text
 
 First of all, we clean the text by converting all the letters to the lower case, and removing punctuation, numbers, empty words and extra white space.
 
@@ -78,7 +79,7 @@ corpus <- VCorpus(VectorSource(ds1$cleaned_hm))%>%
   tm_map(stripWhitespace)
 ```
 
-### Stemming words and converting tm object to tidy object
+### 3) Stemming words and converting tm object to tidy object
 
 Stemming reduces a word to its word *stem*. We stem the words here and then convert the "tm" object to a "tidy" object for much faster processing.
 
@@ -88,7 +89,7 @@ stemmed <- tm_map(corpus, stemDocument) %>%
   select(text)
 ```
 
-### Creating tidy format of the dictionary to be used for completing stems
+### 4) Creating tidy format of the dictionary to be used for completing stems
 
 We also need a dictionary to look up the words corresponding to the stems.
 
@@ -98,7 +99,7 @@ dict <- tidy(corpus) %>%
   unnest_tokens(dictionary, text)
 ```
 
-### Removing stopwords that don't hold any significant information for our data set
+### 5) Removing stopwords that don't hold any significant information for our data set
 
 We remove stopwords provided by the "tidytext" package and also add custom stopwords in context of our data.
 
@@ -112,7 +113,7 @@ stop_words <- stop_words %>%
   bind_rows(mutate(tibble(word), lexicon = "updated"))
 ```
 
-### Combining stems and dictionary into the same tibble
+### 6) Combining stems and dictionary into the same tibble
 
 Here we combine the stems and the dictionary into the same "tidy" object.
 
@@ -124,7 +125,7 @@ completed <- stemmed %>%
   anti_join(stop_words, by = c("dictionary" = "word"))
 ```
 
-### Stem completion
+### 7) Stem completion
 
 Lastly, we complete the stems by picking the corresponding word with the highest frequency.
 
@@ -140,7 +141,7 @@ completed <- completed %>%
   select(-stems)
 ```
 
-### Pasting stem completed individual words into their respective happy moments
+### 8) Pasting stem completed individual words into their respective happy moments
 
 We want our processed words to resemble the structure of the original happy moments. So we paste the words together to form happy moments.
 
@@ -157,7 +158,7 @@ ds1 <- ds1 %>%
   inner_join(completed)
 ```
 
-### Merge demographic information with ds1 and create a new dataset ds2 
+### 9) Merge demographic information with ds1 and create a new dataset ds2 
 
 ```{r}
 ds2 <- ds1 %>%
@@ -180,7 +181,7 @@ ds2 <- ds1 %>%
 
 # Part II: Play with the Words!
 
-### Analyze Single Word
+### 1) Analyze Single Word
 
 Here we create a bag of words and draw word cloud to show the frequency of each single word. We can see 100 most frequent words are "friend", "day", "time", "family", etc. But some of these words are not quite meaningful as the others, like "day", "im", "time". We can not tell what excatly are these happy moments. Tha's why we need to explore bigrams.
 
@@ -200,7 +201,7 @@ wordcloud(words = word_count$word, freq = word_count$n, min.freq = 1,
 # dev.off() # used to save the plot
 ```
 
-### Analyze Bigrams 
+### 2) Analyze Bigrams 
 
 Sometimes two words seem to be more reseonable when they are put together than analyze seperately. So it is necessary to find out all the bigrams and see the frequency of bigrams. First step is to get all bigrams from the text in dataset ds2.
 I noticed that "spent time" and "spend time" are counted as different terms in the top 10 frequanet bigrams, but in fact they have the same meaning. So I substitued "spent time" by "spend time" to avoid repetition.
@@ -240,7 +241,7 @@ bigrams_gender %>%
   coord_flip() +
   labs(x = "", 
        y = "") + 
-  ylim(c(0,600))
+  ylim(c(0,600)) +
   ggtitle("Bigrams frenquency under different gender") +
   theme(plot.title = element_text(hjust = 0.5))
 # dev.off() # used to save the plot
@@ -290,7 +291,7 @@ ggplot(bigrams_parenthood,aes(x = reorder(bigram,n),y = n, fill = parenthood)) +
 # dev.off() # used to save the plot
 ```
 
-### Correlation Between Bigrams
+### 3) Correlation Between Bigrams
 
 We can explore the inner connection between all bigrams using ggraph and visualize the netword of them.
 As you can see, happy moment words like friends,family are usually connected with talk,visit,dinner, ect. Also, most happy moments are connected with friends, family, vedio games, birthdays, it's more detailed and more resonable compared to the sigle word's wordcloud plot.
@@ -378,7 +379,7 @@ ggplot(ds2,aes(x= predicted_category, fill=parenthood)) +
 
 ```
 
-### Heatmap mixture of all these variables.
+###  Heatmap mixture of all these variables.
 
 Too many plots to understand? Let's look at heatmap and draw a conclusion. Here I make a new variable called category, which contains all possible combinations of gender,marital and parenthood. Then generate a matrix using the frenquency of words in each category to cluster these combinations and the categorical labels.
 
